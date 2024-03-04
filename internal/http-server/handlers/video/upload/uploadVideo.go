@@ -1,12 +1,15 @@
 package upload
 
 import (
+	"fmt"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
+	"io"
 	"log/slog"
 	resp "main/internal/lib/api/response"
 	"main/internal/lib/logger/el"
 	"net/http"
+	"os"
 )
 
 type Request struct {
@@ -21,7 +24,7 @@ type Response struct {
 // TODO: fix this
 type IConverter interface {
 	ConvertToBytes(inputPath string) ([]byte, error)
-	ConvertToFile(inputBytes []byte) (string, error)
+	ConvertToFile(fileName string, path string, inputBytes []byte) (string, error)
 }
 
 // TODO: fix this
@@ -38,9 +41,40 @@ func UploadVid(log *slog.Logger, converter IConverter, repo IPgRepo) http.Handle
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var req Request
+		//videoID, _ := r.Context().Value("videoId").(string)
+		videoID := "12"
 
-		err := render.DecodeJSON(r.Body, &req)
+		//if len(videoID) == 0 {
+		//	videoID = "default"
+		//}
+		err := os.MkdirAll(fmt.Sprintf("./vidoes/%s", videoID), os.ModePerm) // создаем директорию с id продукта, если еще не создана
+		if err != nil {
+			//TODO: обработать ошибку
+		}
+
+		path := fmt.Sprintf("./vidoes/%s", videoID)
+
+		// извлечение файла из параметров запроса
+		//form := r.MultipartForm
+		var fileName string = "file12"
+		videExt := "mp4"
+		//for key := range form.File {
+		//	fileName = key
+		//	arr := strings.Split(fileName, ".")
+		//	if len(arr) > 1 {
+		//		videExt = arr[len(arr)-1]
+		//	}
+		//	continue
+		//}
+		//извлекаем из содержимое файла
+		file, _, err := r.FormFile(fileName)
+		if err != nil {
+			//TODO: обработать ошибку
+		}
+		defer file.Close()
+
+		var req Request
+		fileBytes, err := io.ReadAll(file)
 		if err != nil {
 			// Такую ошибку встретим, если получили запрос с пустым телом.
 			// Обработаем её отдельно
@@ -50,11 +84,12 @@ func UploadVid(log *slog.Logger, converter IConverter, repo IPgRepo) http.Handle
 
 			return
 		}
+		fullFileName := fmt.Sprintf("%s.%s", videoID, videExt)
 
 		log.Info("request body decoded", slog.Any("request", req))
 
 		//TODO: доработать метод, который получает видео в некой форме + сохраняет го по filePath
-		path, err := converter.ConvertToFile(req.Bytes)
+		_, err = converter.ConvertToFile(fullFileName, path, fileBytes)
 		if err != nil {
 			log.Error("Failed to convert file", el.Err(err))
 
@@ -63,7 +98,7 @@ func UploadVid(log *slog.Logger, converter IConverter, repo IPgRepo) http.Handle
 			return
 		}
 
-		err = repo.InsertData(req.FileName, path)
+		err = repo.InsertData(fullFileName, path)
 		if err != nil {
 			log.Error("Failed to add filepath", el.Err(err))
 

@@ -9,7 +9,7 @@ import (
 
 type IPgRepo interface {
 	InsertData(fileName string, filePath string) error
-	GetData(filePath string) (string, error)
+	GetData(fileName string) (string, error)
 }
 
 var (

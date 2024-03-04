@@ -7,6 +7,7 @@ import (
 	resp "main/internal/lib/api/response"
 	"main/internal/lib/logger/el"
 	"net/http"
+	"strconv"
 )
 
 type Request struct {
@@ -15,19 +16,20 @@ type Request struct {
 
 type Response struct {
 	resp.Response
-	FilePath string `json:"filePath"`
+	FilePath  string `json:"filePath"`
+	FileBytes []byte `json:"fileBytes"`
 }
 
 // TODO: fix this
 type IConverter interface {
 	ConvertToBytes(inputPath string) ([]byte, error)
-	ConvertToFile(inputBytes []byte) (string, error)
+	ConvertToFile(fileName string, path string, inputBytes []byte) (string, error)
 }
 
 // TODO: fix this
 type IPgRepo interface {
 	InsertData(fileName string, filePath string) error
-	GetData(filePath string) (string, error)
+	GetData(fileName string) (string, error)
 }
 
 func DownloadVid(log *slog.Logger, converter IConverter, repo IPgRepo) http.HandlerFunc {
@@ -38,22 +40,11 @@ func DownloadVid(log *slog.Logger, converter IConverter, repo IPgRepo) http.Hand
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var req Request
+		fileName := r.URL.Query().Get("file_name")
 
-		err := render.DecodeJSON(r.Body, &req)
-		if err != nil {
-			// Такую ошибку встретим, если получили запрос с пустым телом.
-			// Обработаем её отдельно
-			log.Error("failed to decode request body", el.Err(err))
+		log.Info("request body decoded", slog.Any("request", fileName))
 
-			render.JSON(w, r, resp.Error("empty request"))
-
-			return
-		}
-
-		log.Info("request body decoded", slog.Any("request", req))
-
-		path, err := repo.GetData(req.FileName)
+		path, err := repo.GetData(fileName)
 		if err != nil {
 			log.Error("Failed to get filepath", el.Err(err))
 
@@ -62,14 +53,19 @@ func DownloadVid(log *slog.Logger, converter IConverter, repo IPgRepo) http.Hand
 			return
 		}
 
-		log.Info("filepath received")
+		log.Info("filepath received:", path)
 
-		//TODO: добавить метод, который получает filePath + находит нужный файл + передает его клиенту somehow
-		_, err = converter.ConvertToBytes(path)
+		//TODO: метод, который получает filePath + находит нужный файл + передает его клиенту как []bytes
+		//TODO: иправить путь к файлу, тк не получается найти файл используя переменную path
+		fileBytes, err := converter.ConvertToBytes("/Users/leoniddomanin/golangprojects/pjZero/cmd/pjZero/vidoes/12/12.mp4")
+		if err != nil {
+			//TODO: обработать ошибку
+		}
 
-		render.JSON(w, r, Response{
-			Response: resp.OK(),
-			FilePath: path,
-		})
+		w.Header().Set("Content-Type", "video/mp4")
+		w.Header().Set("Content-Length", strconv.Itoa(len(fileBytes)))
+		w.Header().Set("Path", path)
+		w.WriteHeader(http.StatusOK)
+		w.Write(fileBytes)
 	}
 }

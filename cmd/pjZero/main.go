@@ -67,7 +67,7 @@ func main() {
 	router.Use(mwLogger.New(log))
 
 	router.Post("/add-file", upload.UploadVid(log, conv, pgRepo))
-	router.Post("/get-file", download.DownloadVid(log, conv, pgRepo))
+	router.Get("/get-file", download.DownloadVid(log, conv, pgRepo))
 
 	srv := &http.Server{
 		Addr:         cfg.Address,
